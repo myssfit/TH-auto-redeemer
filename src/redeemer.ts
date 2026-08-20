@@ -4,8 +4,9 @@ import { userStore } from './user-store.js';
 const SITE_ID = 1028526 as const;
 const PROJECT_ID = 1028637 as const;
 
-const URL_TO_LOGIN: string = 'https://topheroes.store.kopglobal.com/api/v2/store/login/player';
-const URL_TO_REDEEM: string = 'https://topheroes.store.kopglobal.com/api/v2/store/redemption/redeem';
+// Updated to the new official web mall domain
+const URL_TO_LOGIN: string = 'https://store.topheroes.com/api/v2/store/login/player';
+const URL_TO_REDEEM: string = 'https://store.topheroes.com/api/v2/store/redemption/redeem';
 
 interface LoginRequestBody {
 	site_id: number;
@@ -40,12 +41,11 @@ interface RedemptionResponse {
 export const useRedeemer = (userIds?: string[]) => {
 	const targetUserIds = userIds || userStore.list();
 	
-	// Added browser headers to prevent Cloudflare / WAF blocking
 	const loginHeaders: RawAxiosRequestHeaders = {
 		'accept': 'application/json, text/plain, */*',
 		'content-type': 'application/json',
-		'origin': 'https://topheroes.store.kopglobal.com',
-		'referer': 'https://topheroes.store.kopglobal.com/',
+		'origin': 'https://store.topheroes.com',
+		'referer': 'https://store.topheroes.com/',
 		'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 	};
 
@@ -82,7 +82,6 @@ export const useRedeemer = (userIds?: string[]) => {
 
 			console.log('📥 Login API response body:', JSON.stringify(loginData));
 
-			// Extract token from response body (JSON) OR response headers (fallback)
 			let authorization: string | undefined;
 
 			if (typeof loginData?.data === 'object' && loginData?.data !== null) {
