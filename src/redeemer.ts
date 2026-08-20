@@ -19,6 +19,17 @@ interface RedeemRequestBody {
 	redemption_code: string;
 }
 
+interface LoginResponse {
+	code: number;
+	message: string;
+	data: {
+		token?: string;
+		authorization?: string;
+		[key: string]: any;
+	} | string | null;
+	timestamp?: number;
+}
+
 interface RedemptionResponse {
 	code: number;
 	message: string;
@@ -28,9 +39,14 @@ interface RedemptionResponse {
 
 export const useRedeemer = (userIds?: string[]) => {
 	const targetUserIds = userIds || userStore.list();
+	
+	// Added browser headers to prevent Cloudflare / WAF blocking
 	const loginHeaders: RawAxiosRequestHeaders = {
-		accept: 'application/json, text/plain, */*',
-		'Content-Type': 'application/json'
+		'accept': 'application/json, text/plain, */*',
+		'content-type': 'application/json',
+		'origin': 'https://topheroes.store.kopglobal.com',
+		'referer': 'https://topheroes.store.kopglobal.com/',
+		'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 	};
 
 	const createAxiosInstance = () => axios.create({ headers: loginHeaders });
@@ -56,16 +72,38 @@ export const useRedeemer = (userIds?: string[]) => {
 
 		try {
 			console.log(`🔐 Logging in user: ${userId}`);
-			const { headers: responseHeaders }: AxiosResponse = await axiosInstance.post(
+			const loginResponse: AxiosResponse<LoginResponse> = await axiosInstance.post(
 				URL_TO_LOGIN,
 				createLoginBody(userId)
 			);
 
-			const authorization: string | undefined = responseHeaders['authorization'];
-			console.log('Authorization:', authorization);
+			const loginData = loginResponse.data;
+			const responseHeaders = loginResponse.headers;
+
+			console.log('📥 Login API response body:', JSON.stringify(loginData));
+
+			// Extract token from response body (JSON) OR response headers (fallback)
+			let authorization: string | undefined;
+
+			if (typeof loginData?.data === 'object' && loginData?.data !== null) {
+				authorization = loginData.data.token || loginData.data.authorization;
+			} else if (typeof loginData?.data === 'string') {
+				authorization = loginData.data;
+			}
+
+			if (!authorization && loginData) {
+				authorization = (loginData as any).token || (loginData as any).authorization;
+			}
 
 			if (!authorization) {
-				console.error(`⚠️  The 'Authorization' header is missing for user ${userId}, skipping`);
+				authorization = (responseHeaders['authorization'] as string | undefined) ||
+					(responseHeaders['set-cookie'] ? responseHeaders['set-cookie'][0] : undefined);
+			}
+
+			console.log('🔐 Extracted token:', authorization);
+
+			if (!authorization) {
+				console.error(`⚠️  The 'Authorization' token is missing for user ${userId}, skipping`);
 				return false;
 			}
 
@@ -80,10 +118,8 @@ export const useRedeemer = (userIds?: string[]) => {
 
 			const { data, code, message } = responseData;
 
-			// or might be code === 1
-			if (data === 'success') {
-				console.log(`✅ Result for user ${userId}:`, data);
-
+			if (data === 'success' || code === 0 || code === 200) {
+				console.log(`✅ Result for user ${userId}:`, data || message || 'Success');
 				return true;
 			} else {
 				console.error(`❌ Error processing user ${userId}:`, `(${code})`, message);
