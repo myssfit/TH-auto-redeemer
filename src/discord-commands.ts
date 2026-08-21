@@ -14,11 +14,12 @@ export const extractGiftCodesFromText = (message: string): string[] => {
 
 	const foundCodes = new Set<string>();
 
-	// Target ONLY text inside backticks: `CODE_HERE`
-	const backtickMatches = message.match(/`([a-zA-Z0-9]{5,20})`/g);
+	// 'g' flag ensures it scans past all newlines and multi-line headers
+	const backtickMatches = message.match(/`\s*([a-zA-Z0-9]{5,20})\s*`/g);
 
 	if (backtickMatches) {
 		for (const match of backtickMatches) {
+			// Strip backticks and trim hidden spaces/newlines
 			const cleanCode = match.replace(/`/g, '').trim();
 
 			if (!IGNORED_WORDS.has(cleanCode.toLowerCase()) && !cleanCode.startsWith('http')) {
