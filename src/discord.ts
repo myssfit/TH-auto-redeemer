@@ -44,4 +44,3 @@ export const setupDiscordBot = () => {
 
 	client.login(process.env.DISCORD_TOKEN);
 };
-'
