@@ -2,34 +2,28 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, type Message } from '
 import { userStore } from './user-store.js';
 import { useRedeemer } from './redeemer.js';
 
-// Helper function to extract gift codes from chat messages
-const extractGiftCodesFromText = (message: string): string[] => {
+// Ignore list for known status/system words even if in backticks
+const IGNORED_WORDS = new Set([
+	'check', 'added', 'found', 'removed', 'cleared', 'failed', 'success', 
+	'user', 'users', 'code', 'codes', 'error', 'invalid', 'expired'
+]);
+
+// Helper function to extract gift codes strictly from backticks
+export const extractGiftCodesFromText = (message: string): string[] => {
 	if (!message) return [];
 
-	const cleanMessage = message.replace(/[`*~_]/g, ' ').trim();
 	const foundCodes = new Set<string>();
 
-	// 1. Check for labeled codes
-	const labeledPattern = /(?:gift\s*code(?:\s*\d+)?|code|cd|🎁)[\s:#=-]*([a-zA-Z0-9]{5,20})\b/gi;
-	let match: RegExpExecArray | null;
-	while ((match = labeledPattern.exec(cleanMessage)) !== null) {
-		if (match[1]) {
-			foundCodes.add(match[1]);
-		}
-	}
+	// Target ONLY text inside backticks: `CODE_HERE`
+	const backtickMatches = message.match(/`([a-zA-Z0-9]{5,20})`/g);
 
-	// 2. Check for standalone alphanumeric words
-	const words = cleanMessage.split(/\s+/);
-	for (const word of words) {
-		const clean = word.replace(/^[^\w]+|[^\w]+$/g, '');
-		if (
-			clean.length >= 5 &&
-			clean.length <= 20 &&
-			!clean.startsWith('http') &&
-			!['discord', 'https', 'http', 'topheroes', 'store', 'channel', 'valid', 'until', 'event'].includes(clean.toLowerCase()) &&
-			/^[a-zA-Z0-9]+$/.test(clean)
-		) {
-			foundCodes.add(clean);
+	if (backtickMatches) {
+		for (const match of backtickMatches) {
+			const cleanCode = match.replace(/`/g, '').trim();
+
+			if (!IGNORED_WORDS.has(cleanCode.toLowerCase()) && !cleanCode.startsWith('http')) {
+				foundCodes.add(cleanCode);
+			}
 		}
 	}
 
@@ -99,6 +93,7 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 
 			for (const msg of messages.values()) {
 				const typedMsg = msg as Message;
+				// Ignore ONLY itself during history scan
 				if (typedMsg.author.id === interaction.client.user?.id) continue;
 
 				let fullText = typedMsg.content || '';
@@ -130,7 +125,8 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 				if (success) {
 					successfulRedeems.push(code);
 				}
-				await new Promise(r => setTimeout(r, 1500));
+				// 4-second delay between historical codes to prevent API bans
+				await new Promise(r => setTimeout(r, 4000));
 			}
 
 			if (successfulRedeems.length > 0) {
