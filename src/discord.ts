@@ -9,10 +9,11 @@ import { useRedeemer } from './redeemer.js';
 import { commands, handleSlashCommand } from './discord-commands.js';
 
 const extractGiftCode = (message: string) => {
-	// Target ONLY text strictly inside backticks: `CODE_HERE`
-	const match = message.match(/`([a-zA-Z0-9]{5,20})`/);
-	if (match && match[1]) {
-		return match[1].trim();
+	// Global match to traverse multi-line text blocks reliably
+	const matches = message.match(/`\s*([a-zA-Z0-9]{5,20})\s*`/g);
+	if (matches && matches.length > 0) {
+		// Take the first code found in the message and strip backticks
+		return matches[0].replace(/`/g, '').trim();
 	}
 
 	return undefined;
