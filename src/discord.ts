@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { handleSlashCommand, extractGiftCodesFromText } from './discord-commands.js';
 import { useRedeemer } from './redeemer.js';
 
-export const setupDiscordBot = () => {
+export const useDiscord = () => {
 	const client = new Client({
 		intents: [
 			GatewayIntentBits.Guilds,
