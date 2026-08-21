@@ -4,7 +4,6 @@ import { userStore } from './user-store.js';
 const SITE_ID = 1028526 as const;
 const PROJECT_ID = 1028637 as const;
 
-// Updated to the new official web mall domain
 const URL_TO_LOGIN: string = 'https://store.topheroes.com/api/v2/store/login/player';
 const URL_TO_REDEEM: string = 'https://store.topheroes.com/api/v2/store/redemption/redeem';
 
@@ -34,7 +33,7 @@ interface LoginResponse {
 interface RedemptionResponse {
 	code: number;
 	message: string;
-	data: string | null;
+	data: any;
 	timestamp: number;
 }
 
@@ -66,7 +65,7 @@ export const useRedeemer = (userIds?: string[]) => {
 	const sleep = (duration = 666) => new Promise(resolve => setTimeout(resolve, duration));
 
 	const redeem = async (giftCode: string, userId: string) => {
-		console.log(`🎁 Attempting to redeem gift code: ${giftCode} for user: ${userId}`);
+		console.log(`🎁 Attempting to redeem gift code: ${giftCode} for user:${userId}`);
 
 		const axiosInstance = createAxiosInstance();
 
@@ -79,8 +78,6 @@ export const useRedeemer = (userIds?: string[]) => {
 
 			const loginData = loginResponse.data;
 			const responseHeaders = loginResponse.headers;
-
-			console.log('📥 Login API response body:', JSON.stringify(loginData));
 
 			let authorization: string | undefined;
 
@@ -99,8 +96,6 @@ export const useRedeemer = (userIds?: string[]) => {
 					(responseHeaders['set-cookie'] ? responseHeaders['set-cookie'][0] : undefined);
 			}
 
-			console.log('🔐 Extracted token:', authorization);
-
 			if (!authorization) {
 				console.error(`⚠️  The 'Authorization' token is missing for user ${userId}, skipping`);
 				return false;
@@ -115,10 +110,13 @@ export const useRedeemer = (userIds?: string[]) => {
 				}
 			);
 
+			console.log('📥 Redemption API Response:', JSON.stringify(responseData));
+
 			const { data, code, message } = responseData;
 
-			if (data === 'success' || code === 0 || code === 200) {
-				console.log(`✅ Result for user ${userId}:`, data || message || 'Success');
+			// FIX: Top Heroes API returns code: 1 or data: 'success' / object on valid redemption
+			if (code === 1 || code === 0 || code === 200 || data === 'success' || (data && typeof data === 'object')) {
+				console.log(`✅ Result for user ${userId}: Success (${message || 'Claimed'})`);
 				return true;
 			} else {
 				console.error(`❌ Error processing user ${userId}:`, `(${code})`, message);
