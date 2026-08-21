@@ -1,19 +1,21 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, type Message } from 'discord.js';
 import { userStore } from './user-store.js';
 import { useRedeemer } from './redeemer.js';
 
 // Helper function to extract gift codes from chat messages
-const extractGiftCodesFromText = (message) => {
+const extractGiftCodesFromText = (message: string): string[] => {
 	if (!message) return [];
 
 	const cleanMessage = message.replace(/[`*~_]/g, ' ').trim();
-	const foundCodes = new Set();
+	const foundCodes = new Set<string>();
 
 	// 1. Check for labeled codes
 	const labeledPattern = /(?:gift\s*code(?:\s*\d+)?|code|cd|🎁)[\s:#=-]*([a-zA-Z0-9]{5,20})\b/gi;
-	let match;
+	let match: RegExpExecArray | null;
 	while ((match = labeledPattern.exec(cleanMessage)) !== null) {
-		foundCodes.add(match[1]);
+		if (match[1]) {
+			foundCodes.add(match[1]);
+		}
 	}
 
 	// 2. Check for standalone alphanumeric words
@@ -67,7 +69,7 @@ export const commands = [
 		)
 ].map(command => command.toJSON());
 
-export const handleSlashCommand = async (interaction) => {
+export const handleSlashCommand = async (interaction: ChatInputCommandInteraction) => {
 	const { commandName, options, channel } = interaction;
 
 	if (commandName === 'add-user') {
@@ -84,21 +86,24 @@ export const handleSlashCommand = async (interaction) => {
 			return;
 		}
 
-		// Acknowledge the add right away
 		await interaction.reply({ content: `✅ Added user ID \`${userId}\`! 🔍 Now scanning past channel messages for available gift codes...` });
 
-		// Fetch past 100 messages from the code channel to catch existing codes
 		try {
+			if (!channel || !('messages' in channel)) {
+				await interaction.followUp({ content: '⚠️ User added, but could not fetch channel message history.' });
+				return;
+			}
+
 			const messages = await channel.messages.fetch({ limit: 100 });
-			const historicalCodes = new Set();
+			const historicalCodes = new Set<string>();
 
 			for (const msg of messages.values()) {
-				// Skip bot's own status messages
-				if (msg.author.id === interaction.client.user.id) continue;
+				const typedMsg = msg as Message;
+				if (typedMsg.author.id === interaction.client.user?.id) continue;
 
-				let fullText = msg.content || '';
-				if (msg.embeds && msg.embeds.length > 0) {
-					for (const embed of msg.embeds) {
+				let fullText = typedMsg.content || '';
+				if (typedMsg.embeds && typedMsg.embeds.length > 0) {
+					for (const embed of typedMsg.embeds) {
 						if (embed.title) fullText += `\n${embed.title}`;
 						if (embed.description) fullText += `\n${embed.description}`;
 					}
@@ -118,14 +123,13 @@ export const handleSlashCommand = async (interaction) => {
 			await interaction.followUp({ content: `🎁 Found ${codeList.length} code(s) in channel history: \`${codeList.join(', ')}\`. Attempting redemption for \`${userId}\`...` });
 
 			const { redeem } = useRedeemer();
-			const successfulRedeems = [];
+			const successfulRedeems: string[] = [];
 
 			for (const code of codeList) {
 				const success = await redeem(code, userId);
 				if (success) {
 					successfulRedeems.push(code);
 				}
-				// Small delay between code redemptions to prevent API rate limits
 				await new Promise(r => setTimeout(r, 1500));
 			}
 
@@ -140,7 +144,12 @@ export const handleSlashCommand = async (interaction) => {
 			await interaction.followUp({ content: `⚠️ User added, but encountered an error scanning channel history for codes.` });
 		}
 	} else if (commandName === 'remove-user') {
-		const userId = options.getString('user-id')?.trim();
+		const rawUserId = options.getString('user-id');
+		if (!rawUserId) {
+			await interaction.reply({ content: '❌ Please provide a user ID.', flags: 64 });
+			return;
+		}
+		const userId = rawUserId.trim();
 		const removed = userStore.remove(userId);
 		if (removed) {
 			await interaction.reply({ content: `✅ Removed user ID \`${userId}\`.` });
@@ -158,7 +167,12 @@ export const handleSlashCommand = async (interaction) => {
 		userStore.clear();
 		await interaction.reply({ content: '🗑️ Cleared all user IDs.' });
 	} else if (commandName === 'redeem') {
-		const code = options.getString('code')?.trim();
+		const rawCode = options.getString('code');
+		if (!rawCode) {
+			await interaction.reply({ content: '❌ Please provide a gift code.', flags: 64 });
+			return;
+		}
+		const code = rawCode.trim();
 		await interaction.reply({ content: `🎁 Manually triggering redemption for code: \`${code}\`...` });
 		const { redeemForAll } = useRedeemer();
 		const succeeded = await redeemForAll(code);
