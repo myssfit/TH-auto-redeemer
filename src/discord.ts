@@ -10,7 +10,7 @@ import { commands, handleSlashCommand } from './discord-commands.js';
 
 const extractGiftCode = (message: string) => {
 	// Global match to traverse multi-line text blocks reliably
-	const matches = message.match(/`\s*([a-zA-Z0-9]{5,20})\s*`/g);
+const matches = message.match(/`\s*([a-zA-Z0-9_-]{5,20})\s*`/g);
 	if (matches && matches.length > 0) {
 		// Take the first code found in the message and strip backticks
 		return matches[0].replace(/`/g, '').trim();
