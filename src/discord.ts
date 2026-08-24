@@ -51,8 +51,8 @@ const handleMessageCreate = async (message: Message) => {
 			await channel.send(`❌ Error auto-redeeming code \`${giftCode}\`: ${error}`);
 		}
 
-		// 4-second delay before allowing the handler to finish
-		await new Promise(r => setTimeout(r, 4000));
+		// 1 minute delay before allowing the handler to finish
+		await new Promise(r => setTimeout(r, 60000));
 	}
 };
 
