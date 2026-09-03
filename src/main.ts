@@ -1,10 +1,14 @@
 import { useDiscord } from './discord.js';
+import { getStatus } from './queue.js';
 import { createServer } from 'http';
 
 const server = createServer((request, response) => {
 	if (request.url === '/') {
 		response.writeHead(200, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ status: 'ok', service: 'top-heroes-auto-redeemer' }));
+	} else if (request.url === '/status') {
+		response.writeHead(200, { 'Content-Type': 'application/json' });
+		response.end(JSON.stringify(getStatus(), null, 2));
 	} else {
 		response.writeHead(404);
 		response.end('Not Found');
