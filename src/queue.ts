@@ -1,5 +1,6 @@
 import { userStore } from './user-store.js';
 import { useRedeemer } from './redeemer.js';
+import { label } from './labels.js';
 
 // ─── CONFIG ──────────────────────────────
 const DEBOUNCE_MS      = 5 * 60 * 1000;    // wait after FIRST code, then drain regardless
@@ -173,7 +174,7 @@ const report = async (b: Batch, userId: string, r: PassResult) => {
 	if (parts.length === 0) return;
 
 	try {
-		await b.channel.send(`📊 ${userId} — ${parts.join(' · ')}`);
+		await b.channel.send(`📊 ${label(userId)} — ${parts.join(' · ')}`);
 	} catch (error) {
 		console.error('❌ Could not post report:', error);
 	}
