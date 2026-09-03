@@ -5,8 +5,8 @@ import { useRedeemer } from './redeemer.js';
 const DEBOUNCE_MS      = 5 * 60 * 1000;    // wait after FIRST code, then drain regardless
 const CODE_GAP_MIN_MS  = 30 * 1000;        // gap between codes for one user
 const CODE_GAP_MAX_MS  = 60 * 1000;
-const USER_GAP_MIN_MS  = 1 * 1000;         // gap between users
-const USER_GAP_MAX_MS  = 15 * 1000;
+const USER_GAP_MIN_MS  = 20 * 1000;         // gap between users
+const USER_GAP_MAX_MS  = 40 * 1000;
 const LOGIN_GAP_MIN_MS = 1000;             // gap between login and first redeem
 const LOGIN_GAP_MAX_MS = 9000;
 const COOLDOWN_MIN_MS  = 11 * 60 * 1000;   // brake after a rate-limit signal
