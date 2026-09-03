@@ -5,12 +5,12 @@ import {
 	Routes,
 	Message
 } from 'discord.js';
-import { useRedeemer } from './redeemer.js';
 import { commands, handleSlashCommand } from './discord-commands.js';
+import { enqueueCode, type QueueChannel } from './queue.js';
 
 const extractGiftCode = (message: string) => {
 	// Global match to traverse multi-line text blocks reliably
-const matches = message.match(/`\s*([a-zA-Z0-9_-]{5,20})\s*`/g);
+	const matches = message.match(/`\s*([a-zA-Z0-9_-]{5,20})\s*`/g);
 	if (matches && matches.length > 0) {
 		// Take the first code found in the message and strip backticks
 		return matches[0].replace(/`/g, '').trim();
@@ -26,7 +26,8 @@ const handleMessageCreate = async (message: Message) => {
 	if (author.id === client.user?.id) return;
 
 	if (!channel.isSendable()) {
-		throw new Error('Cannot send a message through this channel. 😳');
+		console.error('Cannot send a message through this channel. 😳');
+		return;
 	}
 
 	const { id, globalName } = author;
@@ -34,25 +35,20 @@ const handleMessageCreate = async (message: Message) => {
 	console.log(`💬 Message from ${globalName} (${id}): ${content}`);
 
 	const giftCode = extractGiftCode(content);
-	if (giftCode) {
-		console.log(`🎁 Auto-detected gift code: ${giftCode}`);
+	if (!giftCode) return;
 
-		try {
-			const { redeemForAll } = useRedeemer();
-			const succeeded = await redeemForAll(giftCode);
-			if (succeeded.length > 0) {
-				const successList = succeeded.map(id => `\`${id}\``).join(', ');
-				await channel.send(`✅ Auto-redeemed code \`${giftCode}\` for: ${successList}`);
-			} else {
-				await channel.send(`❌ Failed to redeem code \`${giftCode}\` for any configured users`);
-			}
-		} catch (error) {
-			console.error('Auto-redeem error:', error);
-			await channel.send(`❌ Error auto-redeeming code \`${giftCode}\`: ${error}`);
-		}
+	console.log(`🎁 Auto-detected gift code: ${giftCode}`);
 
-		// 1 minute delay before allowing the handler to finish
-		await new Promise(r => setTimeout(r, 120000));
+	const added = enqueueCode(giftCode, channel as unknown as QueueChannel);
+	if (added === 0) {
+		console.log(`ℹ️  ${giftCode} already handled this batch, or no users configured`);
+		return;
+	}
+
+	try {
+		await channel.send(`🕐 Queued \`${giftCode}\` for ${added} user(s) — results posted as each user finishes.`);
+	} catch (error) {
+		console.error('❌ Could not acknowledge code:', error);
 	}
 };
 
