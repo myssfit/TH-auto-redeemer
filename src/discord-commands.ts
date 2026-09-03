@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, type Message } from 'discord.js';
 import { userStore } from './user-store.js';
 import { useRedeemer } from './redeemer.js';
-import { enqueueForUser, type QueueChannel } from './queue.js';
+import { enqueueForUser, getStatus, type QueueChannel } from './queue.js';
 
 // Ignore list for known status/system words even if in backticks
 const IGNORED_WORDS = new Set([
@@ -62,7 +62,10 @@ export const commands = [
 			option.setName('code')
 				.setDescription('The gift code to redeem')
 				.setRequired(true)
-		)
+		),
+	new SlashCommandBuilder()
+		.setName('status')
+		.setDescription('Show current redemption queue status')
 ].map(command => command.toJSON());
 
 export const handleSlashCommand = async (interaction: ChatInputCommandInteraction) => {
@@ -162,5 +165,38 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 		} else {
 			await interaction.followUp({ content: `❌ Failed to redeem \`${code}\` for any users.` });
 		}
+	} else if (commandName === 'status') {
+		const s = getStatus();
+
+		if (s.status === 'idle') {
+			await interaction.reply({ content: '💤 **Idle** — no batch in progress.', flags: 64 });
+			return;
+		}
+
+		const icon = s.status === 'cooldown' ? '🧊' : s.status === 'draining' ? '🚚' : '🗂️';
+		const lines: string[] = [`${icon} **${s.status}**`];
+
+		if (s.codes.length > 0) {
+			lines.push(`🎁 Codes: ${s.codes.map(c => `\`${c}\``).join(', ')}`);
+		}
+
+		lines.push(`👥 Users: ${s.users_done} done · ${s.users_left} left · ${s.users_total} total`);
+		lines.push(`📋 Pending pairs: ${s.pending_pairs}`);
+
+		if (s.current_user) {
+			lines.push(`▶️ Current user: \`${s.current_user}\``);
+		}
+
+		if (s.cooldown_until) {
+			const mins = Math.max(0, Math.ceil((new Date(s.cooldown_until).getTime() - Date.now()) / 60000));
+			lines.push(`🧊 Cooldown: ~${mins} min remaining`);
+		}
+
+		if (s.batch_started) {
+			const mins = Math.floor((Date.now() - new Date(s.batch_started).getTime()) / 60000);
+			lines.push(`⏱️ Batch age: ${mins} min`);
+		}
+
+		await interaction.reply({ content: lines.join('\n'), flags: 64 });
 	}
 };
