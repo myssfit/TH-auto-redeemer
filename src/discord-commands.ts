@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, type Message } from 'discord.js';
 import { userStore } from './user-store.js';
 import { useRedeemer } from './redeemer.js';
+import { label } from './labels.js';
 import { enqueueForUser, getStatus, type QueueChannel } from './queue.js';
 
 // Ignore list for known status/system words even if in backticks
