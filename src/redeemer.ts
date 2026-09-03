@@ -1,11 +1,23 @@
 import axios, { type AxiosResponse, type RawAxiosRequestHeaders } from 'axios';
 import { userStore } from './user-store.js';
 
+// ─── CONFIG ──────────────────────────────
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+const LOGIN_GAP_MIN_MS = 1000;   // min pause between login and first redeem
+const LOGIN_GAP_MAX_MS = 9000;   // max pause between login and first redeem
+// ─────────────────────────────────────────
+
 const SITE_ID = 1028526 as const;
 const PROJECT_ID = 1028637 as const;
 
 const URL_TO_LOGIN: string = 'https://store.topheroes.com/api/v2/store/login/player';
 const URL_TO_REDEEM: string = 'https://store.topheroes.com/api/v2/store/redemption/redeem';
+
+// Observed API result codes
+const CODE_SUCCESS = 1 as const;
+const CODE_ALREADY = 80006 as const;   // Personal redemption limit reached
+const CODE_EXPIRED = 80004 as const;   // Redemption code expired
+const RATE_LIMIT_CODE = 10017 as const; // Frequent operations detected (HTTP 200!)
 
 interface LoginRequestBody {
 	site_id: number;
@@ -37,15 +49,31 @@ interface RedemptionResponse {
 	timestamp: number;
 }
 
+export type LoginResult =
+	| { status: 'ok'; token: string }
+	| { status: 'ratelimited' }
+	| { status: 'error'; message: string };
+
+export type RedeemOutcome =
+	| { status: 'claimed'; message: string }
+	| { status: 'already' }
+	| { status: 'expired' }
+	| { status: 'ratelimited' }
+	| { status: 'error'; code: number | string; message: string };
+
+// A rate limit can arrive as HTTP 429 OR as HTTP 200 with code 10017 in the body
+const isRateLimitError = (error: any): boolean =>
+	error?.response?.status === 429 || error?.response?.data?.code === RATE_LIMIT_CODE;
+
 export const useRedeemer = (userIds?: string[]) => {
 	const targetUserIds = userIds || userStore.list();
-	
+
 	const loginHeaders: RawAxiosRequestHeaders = {
 		'accept': 'application/json, text/plain, */*',
 		'content-type': 'application/json',
 		'origin': 'https://store.topheroes.com',
 		'referer': 'https://store.topheroes.com/',
-		'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+		'user-agent': USER_AGENT
 	};
 
 	const createAxiosInstance = () => axios.create({ headers: loginHeaders });
@@ -64,20 +92,25 @@ export const useRedeemer = (userIds?: string[]) => {
 
 	const sleep = (duration = 666) => new Promise(resolve => setTimeout(resolve, duration));
 
-	const redeem = async (giftCode: string, userId: string) => {
-		console.log(`🎁 Attempting to redeem gift code: ${giftCode} for user:${userId}`);
+	const loginGap = () => LOGIN_GAP_MIN_MS + Math.random() * (LOGIN_GAP_MAX_MS - LOGIN_GAP_MIN_MS);
 
-		const axiosInstance = createAxiosInstance();
+	// ─── Step 1: log in, return a bearer token ───
+	const login = async (userId: string): Promise<LoginResult> => {
+		console.log(`🔐 Logging in user: ${userId}`);
 
 		try {
-			console.log(`🔐 Logging in user: ${userId}`);
-			const loginResponse: AxiosResponse<LoginResponse> = await axiosInstance.post(
+			const loginResponse: AxiosResponse<LoginResponse> = await createAxiosInstance().post(
 				URL_TO_LOGIN,
 				createLoginBody(userId)
 			);
 
 			const loginData = loginResponse.data;
 			const responseHeaders = loginResponse.headers;
+
+			if (loginData?.code === RATE_LIMIT_CODE) {
+				console.warn(`🧊 Rate limited on login for ${userId}: ${loginData.message}`);
+				return { status: 'ratelimited' };
+			}
 
 			let authorization: string | undefined;
 
@@ -97,34 +130,71 @@ export const useRedeemer = (userIds?: string[]) => {
 			}
 
 			if (!authorization) {
-				console.error(`⚠️  The 'Authorization' token is missing for user ${userId}, skipping`);
-				return false;
+				console.error(`⚠️  The 'Authorization' token is missing for user ${userId}`);
+				return { status: 'error', message: 'authorization token missing' };
 			}
 
-			console.log(`🎯 Redeeming code for user: ${userId}`);
-			const { data: responseData } = await axiosInstance.post<RedemptionResponse>(
+			return { status: 'ok', token: authorization };
+		} catch (error: any) {
+			if (isRateLimitError(error)) {
+				console.warn(`🧊 Rate limited on login for ${userId} (HTTP ${error?.response?.status})`);
+				return { status: 'ratelimited' };
+			}
+			console.error(`❌ Login error for user ${userId}:`, error?.message ?? error);
+			return { status: 'error', message: String(error?.message ?? error) };
+		}
+	};
+
+	// ─── Step 2: redeem one code with an existing token ───
+	const redeemWithToken = async (token: string, giftCode: string, userId: string): Promise<RedeemOutcome> => {
+		console.log(`🎯 Redeeming ${giftCode} for user: ${userId}`);
+
+		try {
+			const { data: responseData } = await createAxiosInstance().post<RedemptionResponse>(
 				URL_TO_REDEEM,
 				createRedeemBody(giftCode),
-				{
-					headers: { 'Authorization': authorization }
-				}
+				{ headers: { 'Authorization': token } }
 			);
 
 			console.log('📥 Redemption API Response:', JSON.stringify(responseData));
 
 			const { data, code, message } = responseData;
 
-			// FIX: Top Heroes API returns code: 1 or data: 'success' / object on valid redemption
-			if (code === 1 || code === 0 || code === 200 || data === 'success' || (data && typeof data === 'object')) {
-				console.log(`✅ Result for user ${userId}: Success (${message || 'Claimed'})`);
-				return true;
-			} else {
-				console.error(`❌ Error processing user ${userId}:`, `(${code})`, message);
+			if (code === RATE_LIMIT_CODE) return { status: 'ratelimited' };
+			if (code === CODE_EXPIRED) return { status: 'expired' };
+			if (code === CODE_ALREADY) return { status: 'already' };
+
+			if (code === CODE_SUCCESS || code === 0 || code === 200 || data === 'success' || (data && typeof data === 'object')) {
+				return { status: 'claimed', message: message || 'Claimed' };
 			}
-		} catch (error) {
-			console.error(`❌ Error processing user ${userId}:`, error);
+
+			return { status: 'error', code, message: message || 'unknown' };
+		} catch (error: any) {
+			if (isRateLimitError(error)) return { status: 'ratelimited' };
+			console.error(`❌ Redeem error for user ${userId}:`, error?.message ?? error);
+			return { status: 'error', code: error?.code ?? 'EXCEPTION', message: String(error?.message ?? error) };
+		}
+	};
+
+	// ─── Legacy single-shot path (used by redeemForAll / manual /redeem) ───
+	const redeem = async (giftCode: string, userId: string) => {
+		console.log(`🎁 Attempting to redeem gift code: ${giftCode} for user:${userId}`);
+
+		const result = await login(userId);
+		if (result.status !== 'ok') return false;
+
+		const gap = loginGap();
+		console.log(`⏱️  Login→redeem gap: ${(gap / 1000).toFixed(1)}s for user ${userId}`);
+		await sleep(gap);
+
+		const outcome = await redeemWithToken(result.token, giftCode, userId);
+
+		if (outcome.status === 'claimed') {
+			console.log(`✅ Result for user ${userId}: Success (${outcome.message})`);
+			return true;
 		}
 
+		console.error(`❌ Result for user ${userId}: ${outcome.status}`);
 		return false;
 	};
 
@@ -159,5 +229,5 @@ export const useRedeemer = (userIds?: string[]) => {
 		return succeeded;
 	};
 
-	return { redeem, redeemForAll };
+	return { login, redeemWithToken, redeem, redeemForAll };
 };
