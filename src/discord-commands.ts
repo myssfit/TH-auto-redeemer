@@ -1,8 +1,8 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, type Message } from 'discord.js';
 import { userStore } from './user-store.js';
 import { useRedeemer } from './redeemer.js';
-import { label } from './labels.js';
 import { enqueueForUser, getStatus, type QueueChannel } from './queue.js';
+import { label } from './labels.js';
 
 // Ignore list for known status/system words even if in backticks
 const IGNORED_WORDS = new Set([
@@ -82,11 +82,11 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 
 		const added = userStore.add(userId);
 		if (!added) {
-			await interaction.reply({ content: `⚠️ User ID \`${userId}\` is already in the list!`, flags: 64 });
+			await interaction.reply({ content: `⚠️ ${label(userId)} is already in the list!`, flags: 64 });
 			return;
 		}
 
-		await interaction.reply({ content: `✅ Added user ID \`${userId}\`! 🔍 Now scanning past channel messages for available gift codes...` });
+		await interaction.reply({ content: `✅ Added ${label(userId)}! 🔍 Now scanning past channel messages for available gift codes...` });
 
 		try {
 			if (!channel || !('messages' in channel)) {
@@ -123,7 +123,7 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 
 			const queued = enqueueForUser(userId, codeList, channel as unknown as QueueChannel);
 
-			await interaction.followUp({ content: `🎁 Found ${codeList.length} code(s) in channel history: \`${codeList.join(', ')}\`. Queued ${queued} for \`${userId}\` — results will be posted in this channel as they complete.` });
+			await interaction.followUp({ content: `🎁 Found ${codeList.length} code(s) in channel history: \`${codeList.join(', ')}\`. Queued ${queued} for ${label(userId)} — results will be posted in this channel as they complete.` });
 		} catch (error) {
 			console.error('Error scanning channel history:', error);
 			await interaction.followUp({ content: `⚠️ User added, but encountered an error scanning channel history for codes.` });
@@ -137,16 +137,16 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 		const userId = rawUserId.trim();
 		const removed = userStore.remove(userId);
 		if (removed) {
-			await interaction.reply({ content: `✅ Removed user ID \`${userId}\`.` });
+			await interaction.reply({ content: `✅ Removed ${label(userId)}.` });
 		} else {
-			await interaction.reply({ content: `⚠️ User ID \`${userId}\` was not found in the list.`, flags: 64 });
+			await interaction.reply({ content: `⚠️ ${label(userId)} was not found in the list.`, flags: 64 });
 		}
 	} else if (commandName === 'list-users') {
 		const users = userStore.list();
 		if (users.length === 0) {
 			await interaction.reply({ content: '📋 No user IDs currently configured.', flags: 64 });
 		} else {
-			await interaction.reply({ content: `📋 **Configured User IDs (${users.length}):**\n${users.map(u => `• \`${u}\``).join('\n')}`, flags: 64 });
+			await interaction.reply({ content: `📋 **Configured Users (${users.length}):**\n${users.map(u => `• ${label(u)}`).join('\n')}`, flags: 64 });
 		}
 	} else if (commandName === 'clear-users') {
 		userStore.clear();
@@ -162,7 +162,7 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 		const { redeemForAll } = useRedeemer();
 		const succeeded = await redeemForAll(code);
 		if (succeeded.length > 0) {
-			await interaction.followUp({ content: `✅ Successfully redeemed \`${code}\` for: ${succeeded.map(id => `\`${id}\``).join(', ')}` });
+			await interaction.followUp({ content: `✅ Successfully redeemed \`${code}\` for: ${succeeded.map(id => label(id)).join(', ')}` });
 		} else {
 			await interaction.followUp({ content: `❌ Failed to redeem \`${code}\` for any users.` });
 		}
@@ -185,7 +185,7 @@ export const handleSlashCommand = async (interaction: ChatInputCommandInteractio
 		lines.push(`📋 Pending pairs: ${s.pending_pairs}`);
 
 		if (s.current_user) {
-			lines.push(`▶️ Current user: \`${s.current_user}\``);
+			lines.push(`▶️ Current user: ${label(s.current_user)}`);
 		}
 
 		if (s.cooldown_until) {
