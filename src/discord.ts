@@ -52,7 +52,7 @@ const handleMessageCreate = async (message: Message) => {
 		}
 
 		// 1 minute delay before allowing the handler to finish
-		await new Promise(r => setTimeout(r, 60000));
+		await new Promise(r => setTimeout(r, 120000));
 	}
 };
 
