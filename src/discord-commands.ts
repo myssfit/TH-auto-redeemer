@@ -17,7 +17,7 @@ export const extractGiftCodesFromText = (message: string): string[] => {
 	const foundCodes = new Set<string>();
 
 	// 'g' flag ensures it scans past all newlines and multi-line headers
-	const backtickMatches = message.match(/`\s*([a-zA-Z0-9]{5,20})\s*`/g);
+	const backtickMatches = message.match(/`\s*([a-zA-Z0-9_-]{5,20})\s*`/g);
 
 	if (backtickMatches) {
 		for (const match of backtickMatches) {
