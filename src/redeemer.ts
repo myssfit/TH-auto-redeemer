@@ -17,6 +17,7 @@ const URL_TO_REDEEM: string = 'https://store.topheroes.com/api/v2/store/redempti
 const CODE_SUCCESS = 1 as const;
 const CODE_ALREADY = 80006 as const;   // Personal redemption limit reached
 const CODE_EXPIRED = 80004 as const;   // Redemption code expired
+const CODE_NOT_FOUND = 10015 as const; // "Data does not exist" — bogus/removed code, never valid
 const RATE_LIMIT_CODE = 10017 as const; // Frequent operations detected (HTTP 200!)
 
 interface LoginRequestBody {
@@ -161,7 +162,7 @@ export const useRedeemer = (userIds?: string[]) => {
 			const { data, code, message } = responseData;
 
 			if (code === RATE_LIMIT_CODE) return { status: 'ratelimited' };
-			if (code === CODE_EXPIRED) return { status: 'expired' };
+			if (code === CODE_EXPIRED || code === CODE_NOT_FOUND) return { status: 'expired' };
 			if (code === CODE_ALREADY) return { status: 'already' };
 
 			if (code === CODE_SUCCESS || code === 0 || code === 200 || data === 'success' || (data && typeof data === 'object')) {
